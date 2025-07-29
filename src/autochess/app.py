@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import tempfile
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -215,22 +216,28 @@ def prompt_castling_rights() -> str:
     print("  ✘  Invalid input. Please choose one from the list above.")
 
 
-def display_moves(
-  fen: str,
-  castling: str,
-  stockfish_path: str,
-  depth: int = 10,
-):
+def prompt_turn() -> str:
+  while True:
+    ans = input("\nWhose turn is it? (w/b): ").strip().lower()
+    if ans in ["w", "b"]:
+      return ans
+    print("  ✘  Invalid input. Please enter 'w' or 'b'.")
+
+
+def display_moves(fen: str, castling: str, stockfish_path: str, depth: int = 10, turn: str = "w") -> Optional[str]:
   """Calculate and display best moves for both colours."""
   print("\nBEST MOVES:")
   print("-" * 10)
+
+  white_best = None
+  black_best = None
 
   try:
     engine = SimpleStockfish(stockfish_path, depth)
     engine.new_game()  # clear state
 
-    for color, turn in [("White", "w"), ("Black", "b")]:
-      full_fen = f"{fen} {turn} {castling} - 0 1"
+    for color, t in [("White", "w"), ("Black", "b")]:
+      full_fen = f"{fen} {t} {castling} - 0 1"
 
       try:
         engine.set_position(full_fen)
@@ -246,6 +253,11 @@ def display_moves(
             else:
               score_str = f"{info['score']:+.2f}"
             print(f"{i}. {move} (eval: {score_str})")
+          best = top_moves[0]["move"]
+          if color == "White":
+            white_best = best
+          else:
+            black_best = best
         else:
           print(f"\n{color}: No moves found")
       except Exception as e:
@@ -256,6 +268,11 @@ def display_moves(
     print(f"Error initializing engine: {e}")
 
   print("-" * 30)
+
+  if turn == "w":
+    return white_best
+  else:
+    return black_best
 
 
 def main():
@@ -319,7 +336,19 @@ def main():
 
       castling = prompt_castling_rights()
 
-      display_moves(fen, castling, args.stockfish, args.depth)
+      turn = prompt_turn()
+
+      best_move_uci = display_moves(fen, castling, args.stockfish, args.depth, turn)
+
+      if best_move_uci:
+        from_square = best_move_uci[:2]
+        to_square = best_move_uci[2:4]
+        from autochess.move_overlay import ShowMoveOverlay
+
+        shower = ShowMoveOverlay()
+        shower.show_on_monitor(monitor_idx, board_rect, from_square, to_square)
+
+      # Removed duplicate: display_moves(fen, castling, args.stockfish, args.depth)
 
       print("\nPress ENTER to analyze again, or Ctrl+C to exit.")
 
