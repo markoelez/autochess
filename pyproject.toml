@@ -1,0 +1,33 @@
+[project]
+name = "autochess"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Marko Elez", email = "markoelez7@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.3.2",
+    "opencv-python>=4.11.0.86",
+    "scikit-learn>=1.7.1",
+    "torch>=2.7.1",
+    "torchvision>=0.22.1",
+    "mss>=9.0.2",
+    "Pillow>=11.1.0",
+    "PyQt6>=6.7.1",
+]
+
+[project.scripts]
+train = "autochess:train.main"
+inference = "autochess:inference.main"
+board_state = "autochess:board_state.main"
+predict = "autochess:predict.main"
+analyze_and_predict = "autochess:analyze_and_predict.main"
+chess_overlay = "autochess:chess_overlay_app.main"
+app = "autochess:app.main"
+segment = "autochess:segment.main"
+
+[build-system]
+requires = ["uv_build>=0.8.3,<0.9.0"]
+build-backend = "uv_build"

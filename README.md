@@ -1,0 +1,3 @@
+# autochess
+
+Chess copilot
