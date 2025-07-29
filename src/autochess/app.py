@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Chess analyzer with correct preprocessing matching the model training.
-"""
-
 import os
 import sys
 import argparse
@@ -12,7 +8,6 @@ import cv2
 import numpy as np
 import torch
 
-from autochess.predict import complete_fen
 from autochess.segment import ChessBoardSplitter
 from autochess.inference import load_model
 from autochess.stockfish import SimpleStockfish
