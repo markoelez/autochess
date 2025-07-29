@@ -12,7 +12,8 @@ import cv2
 import numpy as np
 import torch
 
-from autochess.predict import StockfishEngine, complete_fen
+from autochess.predict import complete_fen
+from autochess.stockfish_simple import SimpleStockfish
 from autochess.segment import ChessBoardSplitter
 from autochess.inference import load_model
 from autochess.board_state import board_to_string
@@ -202,32 +203,38 @@ def display_moves(fen: str, stockfish_path: str, depth: int = 10):
   print("-" * 10)
 
   try:
-    engine = StockfishEngine(stockfish_path, depth)
+    engine = SimpleStockfish(stockfish_path, depth)
 
     for color, turn in [("White", "w"), ("Black", "b")]:
       full_fen = f"{fen} {turn}"
       full_fen = complete_fen(full_fen)
 
-      engine.set_position(full_fen)
-      top_moves = engine.get_top_moves(5)
+      try:
+        engine.set_position(full_fen)
+        top_moves = engine.get_top_moves(5)
 
-      print(f"\n{color} top 5 moves:")
-      print("-" * 3)
-      for i, info in enumerate(top_moves, 1):
-        move = info["move"]
-        if info["type"] == "mate":
-          mate = info["mate"]
-          if mate > 0:
-            score_str = f"Mate in {mate}"
-          else:
-            score_str = f"Gets mated in {-mate}"
+        if top_moves:
+          print(f"\n{color} top 5 moves:")
+          print("-" * 3)
+          for i, info in enumerate(top_moves, 1):
+            move = info["move"]
+            if info["type"] == "mate":
+              mate = info["mate"]
+              if mate > 0:
+                score_str = f"Mate in {mate}"
+              else:
+                score_str = f"Gets mated in {-mate}"
+            else:
+              score_str = f"{info['score']:+.2f}"
+            print(f"{i}. {move} (eval: {score_str})")
         else:
-          score_str = f"{info['score']:+.2f}"
-        print(f"{i}. {move} (eval: {score_str})")
+          print(f"\n{color}: No moves found")
+      except Exception as e:
+        print(f"\n{color}: Error - {e}")
 
     engine.close()
   except Exception as e:
-    print(f"Error calculating moves: {e}")
+    print(f"Error initializing engine: {e}")
 
   print("-" * 30)
 

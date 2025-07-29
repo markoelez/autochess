@@ -8,6 +8,7 @@ import os
 import sys
 import argparse
 import subprocess
+import time
 from typing import Tuple, Optional
 
 
@@ -35,16 +36,27 @@ class StockfishEngine:
     """Start Stockfish process."""
     try:
       self.process = subprocess.Popen(
-        [self.stockfish_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1
+        [self.stockfish_path], 
+        stdin=subprocess.PIPE, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE, 
+        text=True, 
+        bufsize=1,  # Line buffered
+        universal_newlines=True
       )
+      
+      # Give the process a moment to start
+      time.sleep(0.1)
 
       # Initialize UCI protocol
       self._send_command("uci")
-      output = self._read_output("uciok")
+      output = self._read_until("uciok", timeout=3.0)
       if "uciok" not in output:
-        raise RuntimeError("Failed to initialize UCI protocol")
+        raise RuntimeError(f"Failed to initialize UCI protocol. Output: {output}")
 
     except Exception as e:
+      if self.process:
+        self.process.terminate()
       raise RuntimeError(f"Failed to start Stockfish: {e}")
 
   def _send_command(self, command: str):
@@ -53,24 +65,51 @@ class StockfishEngine:
       self.process.stdin.write(f"{command}\n")
       self.process.stdin.flush()
 
-  def _read_output(self, until: str = None) -> str:
-    """Read output from Stockfish."""
+  def _read_until(self, until: str = None, timeout: float = 5.0) -> str:
+    """Read output until a specific string or timeout."""
     output_lines = []
+    start_time = time.time()
+    
     if self.process and self.process.stdout:
       while True:
-        line = self.process.stdout.readline().strip()
-        if line:
-          output_lines.append(line)
-          if until and line == until:
-            break
-          elif not until and (line == "uciok" or line == "readyok" or line.startswith("bestmove")):
-            break
+        if time.time() - start_time > timeout:
+          raise TimeoutError(f"Timeout after {timeout} seconds")
+        
+        # Set a short timeout for readline
+        import fcntl
+        import os
+        import errno
+        
+        # Make stdout non-blocking
+        flags = fcntl.fcntl(self.process.stdout, fcntl.F_GETFL)
+        fcntl.fcntl(self.process.stdout, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        
+        try:
+          line = self.process.stdout.readline()
+          if line:
+            line = line.strip()
+            output_lines.append(line)
+            if until and line == until:
+              break
+            elif not until and line.startswith("bestmove"):
+              break
+          else:
+            time.sleep(0.01)  # Small delay if no data
+        except IOError as e:
+          if e.errno == errno.EAGAIN:
+            time.sleep(0.01)  # No data available, wait a bit
+          else:
+            raise
+        finally:
+          # Restore blocking mode
+          fcntl.fcntl(self.process.stdout, fcntl.F_SETFL, flags)
+    
     return "\n".join(output_lines)
 
   def _wait_for_ready(self):
     """Wait for engine to be ready."""
     self._send_command("isready")
-    output = self._read_output("readyok")
+    output = self._read_until("readyok", timeout=2.0)
     if "readyok" not in output:
       raise RuntimeError("Stockfish engine not ready")
 
@@ -95,7 +134,12 @@ class StockfishEngine:
     else:
       self._send_command(f"go depth {self.depth}")
 
-    output = self._read_output()
+    # Wait for bestmove response which indicates analysis is complete
+    try:
+      output = self._read_until(timeout=10.0)
+    except TimeoutError:
+      # If timeout, return empty output
+      output = ""
 
     pv_dict = {}
 
@@ -170,7 +214,10 @@ class StockfishEngine:
     else:
       self._send_command(f"go depth {self.depth}")
 
-    output = self._read_output()
+    try:
+      output = self._read_until(timeout=10.0)
+    except TimeoutError:
+      return None, None
 
     # Parse best move from output
     for line in output.split("\n"):
@@ -185,7 +232,10 @@ class StockfishEngine:
   def get_evaluation(self) -> dict:
     """Get position evaluation."""
     self._send_command(f"go depth {self.depth}")
-    output = self._read_output()
+    try:
+      output = self._read_until(timeout=10.0)
+    except TimeoutError:
+      return {"depth": 0, "score": 0, "mate": None, "pv": []}
 
     evaluation = {"depth": 0, "score": 0, "mate": None, "pv": []}
 
@@ -214,9 +264,15 @@ class StockfishEngine:
   def close(self):
     """Close Stockfish process."""
     if self.process:
-      self._send_command("quit")
-      self.process.terminate()
-      self.process.wait()
+      try:
+        self._send_command("quit")
+        self.process.wait(timeout=2.0)
+      except:
+        self.process.terminate()
+        try:
+          self.process.wait(timeout=1.0)
+        except:
+          self.process.kill()
       self.process = None
 
   def __del__(self):
