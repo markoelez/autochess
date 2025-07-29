@@ -13,9 +13,9 @@ import numpy as np
 import torch
 
 from autochess.predict import complete_fen
-from autochess.stockfish_simple import SimpleStockfish
 from autochess.segment import ChessBoardSplitter
 from autochess.inference import load_model
+from autochess.stockfish import SimpleStockfish
 from autochess.board_state import board_to_string
 from autochess.screen_capture import ChessBoardDetector
 from autochess.overlay_selector import OverlaySelector
@@ -197,22 +197,49 @@ def print_board(board_matrix):
   print("  a   b   c   d   e   f   g   h ")
 
 
-def display_moves(fen: str, stockfish_path: str, depth: int = 10):
-  """Calculate and display best moves for both colors."""
+def prompt_castling_rights() -> str:
+  """
+  Ask the user for castling rights and return a validated string.
+
+  Valid inputs are any combination of the letters K Q k q in *canonical*
+  order (KQkq) or “-” when neither side can castle.
+  """
+  rights_list = ["-"]
+  order = "KQkq"
+  for mask in range(1, 16):  # 1 … 15
+    rights = "".join(ch for i, ch in enumerate(order) if mask & (1 << i))
+    rights_list.append(rights)
+
+  print("\nValid castling-rights strings:")
+  print(", ".join(rights_list))
+  valid_set = set(rights_list)
+  while True:
+    answer = input("\nCastling rights: ").strip() or "-"
+    if answer in valid_set:
+      return answer
+    print("  ✘  Invalid input. Please choose one from the list above.")
+
+
+def display_moves(
+  fen: str,
+  castling: str,
+  stockfish_path: str,
+  depth: int = 10,
+):
+  """Calculate and display best moves for both colours."""
   print("\nBEST MOVES:")
   print("-" * 10)
 
   try:
     engine = SimpleStockfish(stockfish_path, depth)
+    engine.new_game()  # clear state
 
     for color, turn in [("White", "w"), ("Black", "b")]:
-      full_fen = f"{fen} {turn}"
-      full_fen = complete_fen(full_fen)
+      full_fen = f"{fen} {turn} {castling} - 0 1"
 
       try:
         engine.set_position(full_fen)
         top_moves = engine.get_top_moves(5)
-
         if top_moves:
           print(f"\n{color} top 5 moves:")
           print("-" * 3)
@@ -220,10 +247,7 @@ def display_moves(fen: str, stockfish_path: str, depth: int = 10):
             move = info["move"]
             if info["type"] == "mate":
               mate = info["mate"]
-              if mate > 0:
-                score_str = f"Mate in {mate}"
-              else:
-                score_str = f"Gets mated in {-mate}"
+              score_str = f"Mate in {mate}" if mate > 0 else f"Gets mated in {-mate}"
             else:
               score_str = f"{info['score']:+.2f}"
             print(f"{i}. {move} (eval: {score_str})")
@@ -298,7 +322,9 @@ def main():
       print_board(board_matrix)
       print(f"\nFEN: {fen}")
 
-      display_moves(fen, args.stockfish, args.depth)
+      castling = prompt_castling_rights()
+
+      display_moves(fen, castling, args.stockfish, args.depth)
 
       print("\nPress ENTER to analyze again, or Ctrl+C to exit.")
 
