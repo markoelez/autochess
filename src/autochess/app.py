@@ -225,47 +225,45 @@ def prompt_turn() -> str:
 
 
 def display_moves(fen: str, castling: str, stockfish_path: str, depth: int = 10, turn: str = "w") -> Optional[str]:
-  """Calculate and display best moves for both colours."""
+  """Calculate and display best moves for both colours, with isolated engines to handle failures."""
   print("\nBEST MOVES:")
   print("-" * 10)
 
   white_best = None
   black_best = None
 
-  try:
-    engine = SimpleStockfish(stockfish_path, depth)
-    engine.new_game()  # clear state
+  for color, t in [("White", "w"), ("Black", "b")]:
+    try:
+      engine = SimpleStockfish(stockfish_path, depth)
+      engine.new_game()  # clear state
 
-    for color, t in [("White", "w"), ("Black", "b")]:
       full_fen = f"{fen} {t} {castling} - 0 1"
 
-      try:
-        engine.set_position(full_fen)
-        top_moves = engine.get_top_moves(5)
-        if top_moves:
-          print(f"\n{color} top 5 moves:")
-          print("-" * 3)
-          for i, info in enumerate(top_moves, 1):
-            move = info["move"]
-            if info["type"] == "mate":
-              mate = info["mate"]
-              score_str = f"Mate in {mate}" if mate > 0 else f"Gets mated in {-mate}"
-            else:
-              score_str = f"{info['score']:+.2f}"
-            print(f"{i}. {move} (eval: {score_str})")
-          best = top_moves[0]["move"]
-          if color == "White":
-            white_best = best
+      engine.set_position(full_fen)
+      top_moves = engine.get_top_moves(5)
+      if top_moves:
+        print(f"\n{color} top 5 moves:")
+        print("-" * 3)
+        for i, info in enumerate(top_moves, 1):
+          move = info["move"]
+          if info["type"] == "mate":
+            mate = info["mate"]
+            score_str = f"Mate in {mate}" if mate > 0 else f"Gets mated in {-mate}"
           else:
-            black_best = best
+            score_str = f"{info['score']:+.2f}"
+          print(f"{i}. {move} (eval: {score_str})")
+        best = top_moves[0]["move"]
+        if color == "White":
+          white_best = best
         else:
-          print(f"\n{color}: No moves found")
-      except Exception as e:
-        print(f"\n{color}: Error - {e}")
-
-    engine.close()
-  except Exception as e:
-    print(f"Error initializing engine: {e}")
+          black_best = best
+      else:
+        print(f"\n{color}: No moves found")
+    except Exception as e:
+      print(f"\n{color}: Error - {e}")
+    finally:
+      if "engine" in locals():
+        engine.close()
 
   print("-" * 30)
 

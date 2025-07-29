@@ -20,9 +20,6 @@ class SimpleStockfish:
     self.process: Optional[subprocess.Popen] = None
     self._start()
 
-  # --------------------------------------------------------------------- #
-  # Low-level helpers                                                     #
-  # --------------------------------------------------------------------- #
   def _send(self, cmd: str) -> None:
     """Write a line to the engine and flush immediately."""
     assert self.process and self.process.stdin
@@ -47,9 +44,6 @@ class SimpleStockfish:
     self._send("isready")
     self._wait_for("readyok", ReadyTimeout)
 
-  # --------------------------------------------------------------------- #
-  # Process management                                                    #
-  # --------------------------------------------------------------------- #
   def _start(self) -> None:
     """Launch the engine and finish UCI initialisation."""
     # in _start(...)
@@ -84,9 +78,6 @@ class SimpleStockfish:
   def __del__(self):
     self.close()
 
-  # --------------------------------------------------------------------- #
-  # Public API                                                            #
-  # --------------------------------------------------------------------- #
   def set_position(self, fen: str) -> None:
     self._send(f"position fen {fen}")
     self._ready()
